@@ -50,7 +50,7 @@ conditioningConcatMethod = ConditioningConcat().concat  #(self, conditioning_to,
 conditioningSetTimestepRangeMethod = ConditioningSetTimestepRange().set_range  
 conditioningSetAreaStrengthMethod = ConditioningSetAreaStrength().append  #(self, conditioning, strength)
 clipSetLastLayerMethod = CLIPSetLastLayer().set_last_layer  #(self, clip, stop_at_clip_layer)
-imageBatchMethod = ImageBatch().batch  #self, image1, image2
+imageBatchMethod = ImageBatch().batch  #(self, image1, image2)
 controlNetLoaderMethod = ControlNetLoader().load_controlnet  #(self, control_net_name)
 controlNetApplyAdvancedMethod = ControlNetApplyAdvanced().apply_controlnet  #(self, positive, negative, control_net, image, strength, start_percent, end_percent, vae=None)
 latentUpscaleMethod = LatentUpscale().upscale  #(self, samples, upscale_method, width, height, crop)
@@ -2440,7 +2440,7 @@ class mwFullPipe_KSAStart:
 
 mwFullPipe_KSAStartMethod = mwFullPipe_KSAStart().mwFPKSAS   #(self, fullPipe, positive, negative, cfg, stepEnd, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, startS, denoise=1.0):
 
-class mwFullPipeTuple_KSAStart2:
+""" class mwFullPipeTuple_KSAStart2:
     def __init__(self):
         self.device = comfy.model_management.intermediate_device()
     @classmethod
@@ -2569,10 +2569,12 @@ class mwFullPipeTuple_KSAStart3:
         else:
             int_return_with_leftover_noise = return_with_leftover_noise
 
+            #def mwFPKSAS(self, fullPipe, positive, negative, cfg, stepEnd, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, startS, denoise=1.0):
+
         arun = mwFullPipe_KSAStartMethod(fullPipeTuple[schedRef[0][0]], positiveTuple[schedRef[0][1]], negativeTuple[schedRef[0][1]], cfg, schedRef[0][2], steps, seed_deltaVsOrig, add_noise, return_with_noise_intermed, startS)
         
         if schedRefLen == 1:
-            ltntPipeOut, ltntOut, imgOut, stepEnd, steps = arun
+            ltntPipeOut, ltntOut, imgOut, stepEnd, steps = arun   #ltntPipe = runLtntOut[0], startW, startH, outputW, outputH
         else:
             ltntPipeOut, _, _, stepEnd, _ = arun
         
@@ -2606,12 +2608,14 @@ class mwFullPipeTuple_KSAStart3:
                         #progImages = imageBatchMethod(progImages, imgOut)[0]
                         #aoldMult8 = amult8                        
                    
-        return (ltntPipeOut, ltntOut, imgOut, stepEnd, steps) #, progImages)
+        return (ltntPipeOut, ltntOut, imgOut, stepEnd, steps) #, progImages) """
 
 
-class mwFullPipeTuple_KSAStart:
+class mwFullPipeTuple_KSA:
     def __init__(self):
         self.device = comfy.model_management.intermediate_device()
+
+    upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
     @classmethod
     def INPUT_TYPES(moh):
         return {"required":
@@ -2620,70 +2624,138 @@ class mwFullPipeTuple_KSAStart:
                     "negativeTuple": ("CONDTUPLE", ),
                     "cfg": ("FLOAT", {"default": 8.0, "min": -100.0, "max": 100.0, "step":0.5, "round": 0.01}),
                     #"stepEnd": ("INT", {"default": 48, "min": 0, "max": 10000}),
-                    "steps": ("INT", {"default": 48, "min": 1, "max": 10000}),
+                    #"steps": ("INT", {"default": 48, "min": 1, "max": 10000}),
                     "seed_deltaVsOrig": ("INT", {"default": 0, "min": 0, "max": 10000, "defaultBehavior": "input"}),
-                    "add_noise": (["enable", "disable"], ),
-                    "return_with_leftover_noise": (["disable", "enable"], ),
-                    "startS": ("MWSIZEPIPE",),
-                    "list_FP_Cond_StepEnd": ("STRING", {"multiline": True}),
+                    "disable_noise_start": ("BOOLEAN", {"default": False}),
+                    "force_full_denoise_intermed": ("BOOLEAN", {"default": True}),
+                    "disable_noise_intermed": ("BOOLEAN", {"default": False}),
+                    "force_full_denoise_end": ("BOOLEAN", {"default": False}),
+                    #"addtl_steps_on_zoom": ("INT", {"default": 0, "min": 0, "max": 64}),
+                    "zoom_by_img_or_ltnt": (["img", "ltnt"], ),
+                    "upscale_method": (moh.upscale_methods,),
+                    "list_FP_Cond_StepStart_StepEnd_Steps_Mult8": ("STRING", {"multiline": True}),
+                    },
+                "optional":
+                    {"sPipeS": ("MWSIZEPIPE",),
+                    "ltntPipe": ("MWLTNTPIPE", ),
                     },
                 }
 
-    RETURN_TYPES = ("MWLTNTPIPE", "LATENT", "IMAGE", "INT", "INT", "IMAGE")
-    RETURN_NAMES = ("ltntPipe", "latent", "image", "stepEnd", "steps", "progImages")
-    FUNCTION = "mwFPTKSAS"
+    RETURN_TYPES = ("MWLTNTPIPE", "LATENT", "IMAGE", "IMAGE")
+    RETURN_NAMES = ("ltntPipe", "latent", "image", "progImages")
+    FUNCTION = "mwFPTKSA"
     CATEGORY = "mohwag/Sampling"
 
-    def mwFPTKSAS(self, fullPipeTuple, positiveTuple, negativeTuple, cfg, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, startS, list_FP_Cond_StepEnd):
+    #mwFullPipe = mwCkpt, seed, sampler_name, scheduler
+    #mwCkptNew = model, clip1, vaeAlways
+    #ltntPipe = ltnt, startW, startH, outputW, outputH
 
-        schedList = list_FP_Cond_StepEnd.splitlines()
+    def mwFPTKSA(self, fullPipeTuple, positiveTuple, negativeTuple, cfg, seed_deltaVsOrig, disable_noise_start, force_full_denoise_intermed, disable_noise_intermed, force_full_denoise_end, zoom_by_img_or_ltnt, upscale_method, list_FP_Cond_StepStart_StepEnd_Steps_Mult8, sPipeS=None, ltntPipe=None):
+        
+        if ltntPipe != None:
+            ltnt, startW, startH, outputW, _ = ltntPipe
+            mult8 = (outputW * 8) // startW
+        elif sPipeS != None:
+            startW, startH = sPipeS
+            ltnt = {"samples":torch.zeros([1, 4, startH // 8, startW // 8], device=self.device)}
+            mult8 = 8
+        else:
+            startW = 1024
+            startH = 1024
+            ltnt = {"samples":torch.zeros([1, 4, startH // 8, startW // 8], device=self.device)}
+            mult8 = 8
+
+        outImg = vae.decode(ltnt["samples"])
+        if mult8 > 8:
+            outImgScaled = imageScaleMethod(outImg, upscale_method, startW, startH, "disabled")[0]
+        else:
+            outImgScaled = outImg
+
+        progImages = outImgScaled
+        inImg = outImg
+        
+
+        schedList = list_FP_Cond_StepStart_StepEnd_Steps_Mult8.splitlines()
         for x in ["", " ", "  "]:
             while(x in schedList):
                 schedList.remove(x)
-
         schedRef = [y.split(" ",-1) for y in schedList]
         schedRefLen = len(schedRef)
 
+
+        iDisableNoise = disable_noise_start
+        iForceFullDenoise = force_full_denoise_intermed
+
+
+        oldMult8 = mult8
+
+        iFullPipe_refnum = -1
+        iCond_refnum = -1
+
+        iFullPipe_refnumOld = iFullPipe_refnum
+        iCond_refnumOld = iCond_refnum
+
+
         for i in range(schedRefLen):
             for j in range(len(schedRef[i])):
-                schedRef[i][j] = int(schedRef[i][j])        
-        
-        if schedRefLen > 1:
-            int_return_with_leftover_noise = "enable"
-        else:
-            int_return_with_leftover_noise = return_with_leftover_noise
+                schedRef[i][j] = int(schedRef[i][j])    
 
-        arun = mwFullPipe_KSAStartMethod(fullPipeTuple[schedRef[0][0]], positiveTuple[schedRef[0][1]], negativeTuple[schedRef[0][1]], cfg, schedRef[0][2], steps, seed_deltaVsOrig, add_noise, int_return_with_leftover_noise, startS)
-        
-        ltntPipeOut, ltntOut, imgOut, stepEnd, steps = arun
-        
-        progImages = imgOut
+            iFullPipe_refnum = schedRef[i][0]
+            if iFullPipe_refnum != iFullPipe_refnumOld:
+                iFullPipe = fullPipeTuple[iFullPipe_refnum]
 
-        add_noise = "disable" 
+            iCond_refnum = schedRef[i][1]
+            if iCond_refnum != iCond_refnumOld:
+                iCondPos = positiveTuple[iCond_refnum]
+                iCondNeg = negativeTuple[iCond_refnum]
 
-        aoldMult8 = 8
-        amult8 = 8
+            stepStart = schedRef[i][2]
+            stepEnd = schedRef[i][3]
+            steps = schedRef[i][4]
 
-        if schedRefLen > 1:
-            for i in range(schedRefLen):
-                if i > 0:
-                    if i == schedRefLen:
-                        int_return_with_leftover_noise = return_with_leftover_noise
-                    if len(schedRef[i]) == 4:
-                        amult8 = schedRef[i][3]
-                    else:
-                        amult8 = aoldMult8
+            if len(schedRef[i]) == 6:
+                mult8 = schedRef[i][5]
+            else:
+                mult8 = oldMult8
 
-                    if amult8 > aoldMult8:
-                        stepEnd = stepEnd - 1
+            mwCkpt, seed, sampler_name, scheduler = iFullPipe
+            model, _, vae = mwCkpt
 
-                    arun = mwFullPipe_KSAMethod(fullPipeTuple[schedRef[i][0]], ltntPipeOut, positiveTuple[schedRef[i][1]], negativeTuple[schedRef[i][1]], cfg, stepEnd, schedRef[i][2], steps, seed_deltaVsOrig, add_noise, int_return_with_leftover_noise, amult8, "bicubic")
-                    #(self, fullPipe, ltntPipe, positive, negative, cfg, stepStart, stepEnd, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, multOver8, upscale_method, denoise=1.0):
-                    ltntPipeOut, ltntOut, imgOut, stepEnd, steps = arun
-                    progImages = imageBatchMethod(progImages, imgOut)[0]
-                    aoldMult8 = amult8
-                   
-        return (ltntPipeOut, ltntOut, imgOut, stepEnd, steps, progImages)
+            seed = seed + seed_deltaVsOrig
+
+            if mult8 != oldMult8:
+                outputW = (startW * mult8) // 8
+                outputH = (startH * mult8) // 8
+                if zoom_by_img_or_ltnt == "img":
+                    inImg = imageScaleMethod(inImg, upscale_method, outputW, outputH, "disabled")[0]  #(self, image, upscale_method, width, height, crop)
+                    ltnt = vaeEncodeMethod(vae, inImg)[0]   #(self, vae, pixels)
+                else:
+                    ltnt = latentUpscaleMethod(ltnt, upscale_method, outputW, outputH, "disabled")[0]    #(self, samples, upscale_method, width, height, crop)
+
+            if i == 1:
+                iDisableNoise = disable_noise_intermed
+            if i == schedRefLen - 1:
+                iForceFullDenoise = force_full_denoise_end
+
+            ltnt = common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, iCondPos, iCondNeg, ltnt, denoise=1, disable_noise=iDisableNoise, start_step=stepStart, last_step=stepEnd, force_full_denoise=iForceFullDenoise)[0]
+            outImg = vae.decode(ltnt["samples"])
+
+            if mult8 > 8:
+                outImgScaled = imageScaleMethod(outImg, upscale_method, startW, startH, "disabled")[0]
+            else:
+                outImgScaled = outImg
+
+            progImages = imageBatchMethod(progImages, outImgScaled)[0]   #(self, image1, image2)
+
+            if i < schedRefLen - 1:
+                oldMult8 = mult8
+                iFullPipe_refnumOld = iFullPipe_refnum
+                iCond_refnumOld = iCond_refnum
+                inImg = outImg
+
+
+        ltntPipeOut = ltnt, startW, startH, outputW, outputH
+        return (ltntPipeOut, ltnt, outImg, progImages)
 
 
 """ class mwFullPipeTuple2_KSA:
@@ -3970,9 +4042,9 @@ NODE_CLASS_MAPPINGS = {
 "mwCondXLadvStack": mwCondXLadvStack,
 "mwCondListDictKeys": mwCondListDictKeys,
 "mwFullPipe_KSAStart": mwFullPipe_KSAStart,
-"mwFullPipeTuple_KSAStart": mwFullPipeTuple_KSAStart,
-"mwFullPipeTuple_KSAStart2": mwFullPipeTuple_KSAStart2,
-"mwFullPipeTuple_KSAStart3": mwFullPipeTuple_KSAStart3,
+"mwFullPipeTuple_KSA": mwFullPipeTuple_KSA,
+#"mwFullPipeTuple_KSAStart2": mwFullPipeTuple_KSAStart2,
+#"mwFullPipeTuple_KSAStart3": mwFullPipeTuple_KSAStart3,
 "mwFullPipe_KSA": mwFullPipe_KSA,
 "mwFPBranch_all": mwFPBranch_all,
 "mwFPBranch_ckpt": mwFPBranch_ckpt,
@@ -4075,9 +4147,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 "mwCondXLadvStack": "CondXLadvStack",
 "mwCondListDictKeys": "CondListDictKeys",
 "mwFullPipe_KSAStart": "FullPipe_KSAStart",
-"mwFullPipeTuple_KSAStart": "FullPipeTuple_KSAStart",
-"mwFullPipeTuple_KSAStart2": "FullPipeTuple_KSAStart2",
-"mwFullPipeTuple_KSAStart3": "FullPipeTuple_KSAStart3",
+"mwFullPipeTuple_KSA": "FullPipeTuple_KSA",
+#"mwFullPipeTuple_KSAStart2": "FullPipeTuple_KSAStart2",
+#"mwFullPipeTuple_KSAStart3": "FullPipeTuple_KSAStart3",
 "mwFullPipe_KSA": "FullPipe_KSA",
 "mwFPBranch_all": "FPBranch_all",
 "mwFPBranch_ckpt": "FPBranch_ckpt",
