@@ -2673,16 +2673,19 @@ class mwFullPipeTuple_KSA:
         iCondNeg = negativeTuple[iCond_refnum]
 
         if ltntPipe != None:
-            ltnt, startW, startH, outputW, _ = ltntPipe
+            ltnt, startW, startH, outputW, outPutH = ltntPipe
             mult8 = (outputW * 8) // startW
         elif sPipeS != None:
             startW, startH = sPipeS
-            ltnt = {"samples":torch.zeros([1, 4, startH // 8, startW // 8], device=self.device)}
+            outputW, outputH = sPipeS
+            ltnt = {"samples":torch.zeros([1, 4, outputH // 8, outputW // 8], device=self.device)}
             mult8 = 8
         else:
             startW = 1024
             startH = 1024
-            ltnt = {"samples":torch.zeros([1, 4, startH // 8, startW // 8], device=self.device)}
+            outputW = 1024
+            outputH = 1024
+            ltnt = {"samples":torch.zeros([1, 4, outputH // 8, outputW // 8], device=self.device)}
             mult8 = 8
 
         outImg = vae.decode(ltnt["samples"])
