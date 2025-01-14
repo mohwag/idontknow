@@ -2651,7 +2651,27 @@ class mwFullPipeTuple_KSA:
     #ltntPipe = ltnt, startW, startH, outputW, outputH
 
     def mwFPTKSA(self, fullPipeTuple, positiveTuple, negativeTuple, cfg, seed_deltaVsOrig, disable_noise_start, force_full_denoise_intermed, disable_noise_intermed, force_full_denoise_end, zoom_by_img_or_ltnt, upscale_method, list_FP_Cond_StepStart_StepEnd_Steps_Mult8, sPipeS=None, ltntPipe=None):
-        
+        schedList = list_FP_Cond_StepStart_StepEnd_Steps_Mult8.splitlines()
+        for x in ["", " ", "  "]:
+            while(x in schedList):
+                schedList.remove(x)
+        schedRef = [y.split(" ",-1) for y in schedList]
+        schedRefLen = len(schedRef)
+
+        for i in range(schedRefLen):
+            for j in range(len(schedRef[i])):
+                schedRef[i][j] = int(schedRef[i][j])    
+
+        iFullPipe_refnum = schedRef[0][0]
+        iFullPipe = fullPipeTuple[iFullPipe_refnum]
+        mwCkpt, seed, sampler_name, scheduler = iFullPipe
+        model, _, vae = mwCkpt
+        seed = seed + seed_deltaVsOrig
+
+        iCond_refnum = schedRef[i][1]
+        iCondPos = positiveTuple[iCond_refnum]
+        iCondNeg = negativeTuple[iCond_refnum]
+
         if ltntPipe != None:
             ltnt, startW, startH, outputW, _ = ltntPipe
             mult8 = (outputW * 8) // startW
@@ -2674,35 +2694,21 @@ class mwFullPipeTuple_KSA:
         progImages = outImgScaled
         inImg = outImg
         
-
-        schedList = list_FP_Cond_StepStart_StepEnd_Steps_Mult8.splitlines()
-        for x in ["", " ", "  "]:
-            while(x in schedList):
-                schedList.remove(x)
-        schedRef = [y.split(" ",-1) for y in schedList]
-        schedRefLen = len(schedRef)
-
-
         iDisableNoise = disable_noise_start
         iForceFullDenoise = force_full_denoise_intermed
 
-
         oldMult8 = mult8
-
-        iFullPipe_refnum = -1
-        iCond_refnum = -1
 
         iFullPipe_refnumOld = iFullPipe_refnum
         iCond_refnumOld = iCond_refnum
 
 
         for i in range(schedRefLen):
-            for j in range(len(schedRef[i])):
-                schedRef[i][j] = int(schedRef[i][j])    
 
             iFullPipe_refnum = schedRef[i][0]
             if iFullPipe_refnum != iFullPipe_refnumOld:
                 iFullPipe = fullPipeTuple[iFullPipe_refnum]
+                model, _, vae = iFullPipe[0]
 
             iCond_refnum = schedRef[i][1]
             if iCond_refnum != iCond_refnumOld:
@@ -2717,11 +2723,6 @@ class mwFullPipeTuple_KSA:
                 mult8 = schedRef[i][5]
             else:
                 mult8 = oldMult8
-
-            mwCkpt, seed, sampler_name, scheduler = iFullPipe
-            model, _, vae = mwCkpt
-
-            seed = seed + seed_deltaVsOrig
 
             if mult8 != oldMult8:
                 outputW = (startW * mult8) // 8
