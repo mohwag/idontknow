@@ -2523,6 +2523,92 @@ class mwFullPipeTuple_KSAStart2:
                    
         return (ltntPipeOut, ltntOut, imgOut, stepEnd, steps) #, progImages)
 
+class mwFullPipeTuple_KSAStart3:
+    def __init__(self):
+        self.device = comfy.model_management.intermediate_device()
+    @classmethod
+    def INPUT_TYPES(moh):
+        return {"required":
+                    {"fullPipeTuple": ("MWFULLPIPETUPLE",),
+                    "positiveTuple": ("CONDTUPLE", ),
+                    "negativeTuple": ("CONDTUPLE", ),
+                    "cfg": ("FLOAT", {"default": 8.0, "min": -100.0, "max": 100.0, "step":0.5, "round": 0.01}),
+                    #"stepEnd": ("INT", {"default": 48, "min": 0, "max": 10000}),
+                    "steps": ("INT", {"default": 48, "min": 1, "max": 10000}),
+                    "seed_deltaVsOrig": ("INT", {"default": 0, "min": 0, "max": 10000, "defaultBehavior": "input"}),
+                    "add_noise": (["enable", "disable"], ),
+                    "return_with_leftover_noise": (["disable", "enable"], ),
+                    "startS": ("MWSIZEPIPE",),
+                    "list_FP_Cond_StepEnd": ("STRING", {"multiline": True}),
+                    "extraStepsOnZoom": ("INT", {"default": 0, "min": 0, "max": 64, "defaultBehavior": "input"}),
+                    "return_with_noise_intermed": (["disable", "enable"], ),
+                    },
+                }
+
+    RETURN_TYPES = ("MWLTNTPIPE", "LATENT", "IMAGE", "INT", "INT")
+    RETURN_NAMES = ("ltntPipe", "latent", "image", "stepEnd", "steps")
+    FUNCTION = "mwFPTKSASTH"
+    CATEGORY = "mohwag/Sampling"
+
+    def mwFPTKSASTH(self, fullPipeTuple, positiveTuple, negativeTuple, cfg, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, startS, list_FP_Cond_StepEnd, extraStepsOnZoom, return_with_noise_intermed):
+
+        schedList = list_FP_Cond_StepEnd.splitlines()
+        for x in ["", " ", "  "]:
+            while(x in schedList):
+                schedList.remove(x)
+
+        schedRef = [y.split(" ",-1) for y in schedList]
+        schedRefLen = len(schedRef)
+
+        for i in range(schedRefLen):
+            for j in range(len(schedRef[i])):
+                schedRef[i][j] = int(schedRef[i][j])        
+        
+        if schedRefLen > 1:
+            int_return_with_leftover_noise = "enable"
+        else:
+            int_return_with_leftover_noise = return_with_leftover_noise
+
+        arun = mwFullPipe_KSAStartMethod(fullPipeTuple[schedRef[0][0]], positiveTuple[schedRef[0][1]], negativeTuple[schedRef[0][1]], cfg, schedRef[0][2], steps, seed_deltaVsOrig, add_noise, return_with_noise_intermed, startS)
+        
+        if schedRefLen == 1:
+            ltntPipeOut, ltntOut, imgOut, stepEnd, steps = arun
+        else:
+            ltntPipeOut, _, _, stepEnd, _ = arun
+        
+        #progImages = imgOut
+
+        if schedRefLen > 1:
+            add_noise = "disable" 
+            aoldMult8 = 8
+            amult8 = 8
+            for i in range(schedRefLen):
+                if i > 0:
+                    if len(schedRef[i]) == 4:
+                        amult8 = schedRef[i][3]
+                    else:
+                        amult8 = aoldMult8
+
+                    if amult8 > aoldMult8:
+                        stepEnd = stepEnd - extraStepsOnZoom
+
+                    if i < schedRefLen - 1:
+                        arun = mwFullPipe_KSAMethod(fullPipeTuple[schedRef[i][0]], ltntPipeOut, positiveTuple[schedRef[i][1]], negativeTuple[schedRef[i][1]], cfg, stepEnd, schedRef[i][2], steps, seed_deltaVsOrig, add_noise, return_with_noise_intermed, amult8, "bicubic")
+                        #(self, fullPipe, ltntPipe, positive, negative, cfg, stepStart, stepEnd, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, multOver8, upscale_method, denoise=1.0):
+                        ltntPipeOut, _, _, stepEnd, _ = arun
+                        #progImages = imageBatchMethod(progImages, imgOut)[0]
+                        aoldMult8 = amult8
+                    else:
+                        int_return_with_leftover_noise = return_with_leftover_noise
+                        arun = mwFullPipe_KSAMethod(fullPipeTuple[schedRef[i][0]], ltntPipeOut, positiveTuple[schedRef[i][1]], negativeTuple[schedRef[i][1]], cfg, stepEnd, schedRef[i][2], steps, seed_deltaVsOrig, add_noise, int_return_with_leftover_noise, amult8, "bicubic")
+                        #(self, fullPipe, ltntPipe, positive, negative, cfg, stepStart, stepEnd, steps, seed_deltaVsOrig, add_noise, return_with_leftover_noise, multOver8, upscale_method, denoise=1.0):
+                        ltntPipeOut, ltntOut, imgOut, stepEnd, _ = arun
+                        #progImages = imageBatchMethod(progImages, imgOut)[0]
+                        #aoldMult8 = amult8                        
+                   
+        return (ltntPipeOut, ltntOut, imgOut, stepEnd, steps) #, progImages)
+
+
 class mwFullPipeTuple_KSAStart:
     def __init__(self):
         self.device = comfy.model_management.intermediate_device()
@@ -3886,6 +3972,7 @@ NODE_CLASS_MAPPINGS = {
 "mwFullPipe_KSAStart": mwFullPipe_KSAStart,
 "mwFullPipeTuple_KSAStart": mwFullPipeTuple_KSAStart,
 "mwFullPipeTuple_KSAStart2": mwFullPipeTuple_KSAStart2,
+"mwFullPipeTuple_KSAStart3": mwFullPipeTuple_KSAStart3,
 "mwFullPipe_KSA": mwFullPipe_KSA,
 "mwFPBranch_all": mwFPBranch_all,
 "mwFPBranch_ckpt": mwFPBranch_ckpt,
@@ -3990,6 +4077,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 "mwFullPipe_KSAStart": "FullPipe_KSAStart",
 "mwFullPipeTuple_KSAStart": "FullPipeTuple_KSAStart",
 "mwFullPipeTuple_KSAStart2": "FullPipeTuple_KSAStart2",
+"mwFullPipeTuple_KSAStart3": "FullPipeTuple_KSAStart3",
 "mwFullPipe_KSA": "FullPipe_KSA",
 "mwFPBranch_all": "FPBranch_all",
 "mwFPBranch_ckpt": "FPBranch_ckpt",
